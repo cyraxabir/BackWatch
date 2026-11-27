@@ -1,0 +1,49 @@
+[Unit]
+Description=Backup Health Monitor and Retention Service
+Documentation=https://github.com/your-org/backup-health-monitor
+After=network.target local-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=backupmon
+Group=backupmon
+
+# Working directory and execution
+WorkingDirectory=/opt/backup-health-monitor
+ExecStart=/opt/backup-health-monitor/venv/bin/python -m app.main
+Restart=always
+RestartSec=10
+
+# Configuration & environment
+EnvironmentFile=-/etc/backup-health-monitor/backwatch.env
+Environment=PYTHONUNBUFFERED=1
+Environment=CONFIG_PATH=/etc/backup-health-monitor/config.yml
+Environment=STATE_DIR=/var/lib/backup-health-monitor
+Environment=DB_PATH=/var/lib/backup-health-monitor/history.db
+
+# Standard output/error to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=backup-health-monitor
+
+# ── Security & Process Hardening ──────────────────────────
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Filesystem permissions
+ReadWritePaths=/var/lib/backup-health-monitor
+# State directory creation handled by systemd
+StateDirectory=backup-health-monitor
+ConfigurationDirectory=backup-health-monitor
+
+[Install]
+WantedBy=multi-user.target
+Alias=BM.service

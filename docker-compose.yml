@@ -1,0 +1,158 @@
+# ============================================================
+# Docker Compose — Backup Health Monitor Stack
+# ============================================================
+#
+# Services:
+#   - backup-monitor: Main monitoring application
+#   - prometheus: Metrics collection
+#   - grafana: Dashboards and visualization
+#   - alertmanager: Alert routing and notifications
+#   - ollama (optional profile): AI summarization
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose --profile ai up -d   # with Ollama
+#
+# IMPORTANT: Edit BACKUP_HOST_PATH to your actual backup directory.
+# ============================================================
+
+x-backup-host-path: &backup-host-path
+  # ── EDIT THIS to your actual backup directory ──
+  # Example: /var/backups/db
+  ${BACKUP_HOST_PATH:-/var/backups/db}
+
+services:
+  # ── Backup Monitor ────────────────────────────────────────
+  backup-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backup-monitor
+    restart: unless-stopped
+    ports:
+      - "9108:9108"
+    volumes:
+      # Backup directory mount
+      # Use :ro for monitoring-only, :rw if retention deletion is enabled
+      - *backup-host-path:/backups:ro
+      # Persistent state (history database, reports)
+      - monitor-state:/state
+      # Configuration
+      - ./config/config.yml:/app/config/config.yml:ro
+    environment:
+      - CONFIG_PATH=/app/config/config.yml
+      - BACKUP_ROOT=/backups
+      - STATE_DIR=/state
+      - DB_PATH=/state/history.db
+      - METRICS_PORT=9108
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - OLLAMA_ENABLED=${AI_ENABLED:-${OLLAMA_ENABLED:-false}}
+      - OLLAMA_URL=${AI_URL:-${OLLAMA_URL:-http://ollama:11434}}
+      - OLLAMA_MODEL=${AI_MODEL:-${OLLAMA_MODEL:-qwen2.5:7b}}
+      - AI_API_KEY=${AI_API_KEY:-${OLLAMA_API_KEY:-}}
+      - AI_API_TYPE=${AI_API_TYPE:-auto}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # ── Prometheus ────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring
+
+  # ── Grafana ───────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring
+
+  # ── Alertmanager ──────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring
+
+  # ── Ollama (Optional — use `--profile ai`) ───────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    profiles:
+      - ai
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - monitoring
+
+volumes:
+  monitor-state:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  ollama-data:
+
+networks:
+  monitoring:
+    driver: bridge

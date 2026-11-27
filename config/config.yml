@@ -1,0 +1,113 @@
+# ============================================================
+# Backup Health Monitor — Default Configuration
+# ============================================================
+#
+# This is the default configuration. Override values via
+# environment variables or by editing this file.
+#
+# IMPORTANT: First deployment should be MONITORING-ONLY.
+# retention.dry_run is true by default — no files are deleted.
+# ============================================================
+
+# Root path where backups are mounted
+backup_root: /backups
+
+# How often to scan (seconds)
+scan_interval_seconds: 3600
+
+# State/report directory
+state_dir: /state
+
+# History database path
+db_path: /state/history.db
+
+# ── Backup File Allow-List ─────────────────────────────────
+# ONLY files matching these patterns are considered backup files.
+# .sh, .txt, .md, .log, etc. are IGNORED.
+backup_file_patterns:
+  - "*.sql"
+  - "*.sql.gz"
+  - "*.dump"
+  - "*.backup"
+  - "*.tar.gz"
+  - "*.tgz"
+  - "*.zip"
+
+# ── Health Check Configuration ─────────────────────────────
+health:
+  # Maximum age of newest backup file (hours) before STALE/FAIL
+  # Uses actual file mtime, NOT folder date
+  expected_interval_hours: 26
+
+  # Minimum acceptable file size (bytes) — catches zero-byte backups
+  minimum_file_size_bytes: 1
+
+  # Size change threshold (%) for anomaly detection against baseline
+  size_anomaly_threshold_percent: 60
+
+# ── Retention Configuration ────────────────────────────────
+# IMPORTANT: dry_run=true by default. Nothing is deleted.
+# Only canonical IP/YYYY/MM/DD/ directories are targeted.
+# Scripts, .txt, .sh, special dirs are NEVER deleted.
+retention:
+  enabled: true
+  days: 7
+  dry_run: true
+  minimum_good_backups: 2
+
+# ── Restore Test Configuration ─────────────────────────────
+# Off by default. Uses disposable Docker containers.
+# NEVER restores into production databases.
+restore_test:
+  enabled: false
+  frequency: weekly    # daily or weekly
+  sample_count: 1
+
+# ── Special (Non-IP) Directories ───────────────────────────
+# Configure non-standard backup directories here.
+# Normal IP/YYYY/MM/DD/GROUP backups are auto-discovered.
+#
+# Example:
+# special:
+#   SPECIAL_ARCHIVE:
+#     path: /backups/SPECIAL_ARCHIVE
+#     expected_interval_hours: 26
+#     patterns:
+#       - "*.sql"
+#       - "*.sql.gz"
+#   LEGACY_BACKUP_DIR:
+#     path: /backups/LEGACY_BACKUP_DIR
+#     expected_interval_hours: 48
+special: {}
+
+# ── Notifications ──────────────────────────────────────────
+# Use environment variables for sensitive URLs.
+# WEBHOOK_URL and ALERTMANAGER_URL override these values.
+notifications:
+  webhook: ""
+  alertmanager_url: ""
+
+# ── AI Summarization (Optional) ───────────────────────────
+# AI is OPTIONAL. The system works fully without it.
+# AI only summarizes deterministic results.
+# AI never makes backup/deletion decisions.
+#
+# Supports:
+# - OpenAI (GPT-4o, GPT-4o-mini, etc.)
+# - Anthropic Claude (claude-3-5-haiku, claude-3-5-sonnet, etc.)
+# - OpenWebUI / vLLM / LiteLLM (OpenAI-compatible)
+# - Ollama (Local / Self-hosted)
+ai:
+  enabled: false
+  # Examples:
+  # - OpenAI: "https://api.openai.com/v1"
+  # - Anthropic Claude: "https://api.anthropic.com/v1"
+  # - OpenWebUI: "https://chat.your-domain.com/api/v1"
+  # - Ollama: "http://localhost:11434"
+  url: "http://localhost:11434"
+  model: "qwen2.5:7b"
+  # API key for authentication (OpenAI, Claude, OpenWebUI)
+  # Can also be provided via AI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY env vars.
+  api_key: ""
+  # Provider: "auto", "openai", "claude", "openwebui", or "ollama"
+  provider: "auto"

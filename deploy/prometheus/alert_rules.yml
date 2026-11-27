@@ -1,0 +1,66 @@
+# Prometheus Alert Rules for Backup Health Monitor
+groups:
+  - name: backup_alerts
+    rules:
+      - alert: BackupMissing
+        expr: backup_group_healthy == 0 and backup_group_file_count == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup missing for {{ $labels.server }}/{{ $labels.backup_group }}"
+          description: "No valid backup files found for {{ $labels.backup_group }} on {{ $labels.server }}."
+
+      - alert: BackupStale
+        expr: backup_group_latest_age_hours > 26
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stale backup: {{ $labels.server }}/{{ $labels.backup_group }}"
+          description: "Backup age is {{ $value | humanize }}h (expected < 26h) for {{ $labels.backup_group }} on {{ $labels.server }}."
+
+      - alert: BackupSizeAnomaly
+        expr: backup_group_size_anomaly == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Size anomaly: {{ $labels.server }}/{{ $labels.backup_group }}"
+          description: "Backup size anomaly detected for {{ $labels.backup_group }} on {{ $labels.server }}."
+
+      - alert: BackupCorrupt
+        expr: backup_group_healthy == 0 and backup_group_file_count > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Corrupt backup: {{ $labels.server }}/{{ $labels.backup_group }}"
+          description: "Integrity check failed for {{ $labels.backup_group }} on {{ $labels.server }}."
+
+      - alert: ZeroFileCount
+        expr: backup_group_file_count == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zero backup files: {{ $labels.server }}/{{ $labels.backup_group }}"
+          description: "No backup files found in {{ $labels.backup_group }} on {{ $labels.server }}."
+
+      - alert: RestoreTestFailed
+        expr: backup_restore_test_failure > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup restore test failed"
+          description: "{{ $value }} restore test(s) failed."
+
+      - alert: TooManyFailedGroups
+        expr: backup_failed_groups > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Many backup groups failing"
+          description: "{{ $value }} backup groups are in FAIL state."
